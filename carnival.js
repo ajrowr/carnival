@@ -12,7 +12,7 @@ window.CARNIVAL = (function () {
         this._componentMeta = {};
         this._postRenderTasks = []; /* Things to be done after a frame is presented. An array of functions that is cleared after use */
         this._postRenderTasksVeto = false;
-        this._currentTextureUnit = null;
+        this._cameraLocked = false;
         
         this.core = {
             util: FCUtil,
@@ -359,6 +359,8 @@ window.CARNIVAL = (function () {
     var gl = null;
     var _scene = null;
     
+    var _cameraLockPose = null;
+    
     Framework.prototype.start = function () {
         "use strict";
         
@@ -490,7 +492,7 @@ window.CARNIVAL = (function () {
         gl.clearColor(engine.clearColor.g, engine.clearColor.r, engine.clearColor.b, engine.clearColor.a);
         // gl.clearColor(0.1, 0.4, 0.2, 1.0);
         gl.enable(gl.DEPTH_TEST);
-        // gl.enable(gl.CULL_FACE);
+        gl.enable(gl.CULL_FACE);
         engine.gl = gl;
         
         var texMax = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
@@ -888,6 +890,64 @@ window.CARNIVAL = (function () {
             else {
                 return getCameraPos();
             }
+        }
+        return poseGet;
+    }
+    
+    /* TODO incorporate player/raft translation */
+    /* TODO make a button lock and unlock */
+    var lockableGamepadCam = function (gpIdx) {
+        var poseGet = function () {
+            if (!CARNIVAL._cameraLocked) {
+                var vrGamepads = CARNIVAL.hardware.controller.getMotionControllers();
+                if (vrGamepads[gpIdx] && vrGamepads[gpIdx].pose && vrGamepads[gpIdx].pose.position) {
+                    var myGp = vrGamepads[gpIdx];
+                    // var gPose = myGp.pose;
+                    // var cameraTranslate = vec3.create();
+                    // var cameraTilt = vec3.create();
+                    // cameraTranslate[0] = numericValueOfElement('cameraTranslateX');
+                    // cameraTranslate[1] = numericValueOfElement('cameraTranslateY');
+                    // cameraTranslate[2] = numericValueOfElement('cameraTranslateZ');
+                    // cameraTilt[0] = numericValueOfElement('cameraTiltX');
+                    // cameraTilt[1] = numericValueOfElement('cameraTiltY');
+                    // cameraTilt[2] = numericValueOfElement('cameraTiltZ');
+                    // var cameraPos = vec3.create();
+                    // vec3.add(cameraPos, cameraTranslate, gPose.position);
+                    // if (window.vrDisplay.stageParameters) {
+                    //     mat4.fromRotationTranslation(gpMat, gPose.orientation, cameraPos);
+                    //     mat4.multiply(gpMat, vrDisplay.stageParameters.sittingToStandingTransform, gpMat);
+                    // }
+                    var p = myGp.pose;
+                    _cameraLockPose = {
+                        position: [p.position[0], p.position[1], p.position[2]],
+                        orientation: [p.orientation[0], p.orientation[1], p.orientation[2], p.orientation[3]]
+                    };
+                    window.CPOSE = _cameraLockPose;
+                    // mat4.clone(_cameraLockPose, myGp.pose);
+                }
+                // _cameraLockPose = gpMat;
+                
+                
+            }
+            
+            var gpMat = mat4.create();
+            var cameraTranslate = vec3.create();
+            var cameraTilt = vec3.create();
+            cameraTranslate[0] = numericValueOfElement('cameraTranslateX');
+            cameraTranslate[1] = numericValueOfElement('cameraTranslateY');
+            cameraTranslate[2] = numericValueOfElement('cameraTranslateZ');
+            cameraTilt[0] = numericValueOfElement('cameraTiltX');
+            cameraTilt[1] = numericValueOfElement('cameraTiltY');
+            cameraTilt[2] = numericValueOfElement('cameraTiltZ');
+            var cameraPos = vec3.create();
+            vec3.add(cameraPos, cameraTranslate, _cameraLockPose.position);
+            if (window.vrDisplay.stageParameters) {
+                mat4.fromRotationTranslation(gpMat, _cameraLockPose.orientation, cameraPos);
+                mat4.multiply(gpMat, vrDisplay.stageParameters.sittingToStandingTransform, gpMat);
+            }
+            
+            // var transformedCameraPose = mat4.create();
+            return gpMat;
         }
         return poseGet;
     }
