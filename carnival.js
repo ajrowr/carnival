@@ -2,7 +2,10 @@
 /* This code (or something like it) will become part of (or a wrapper for) the framework. */
 window.CARNIVAL = (function () {
     
+    var TODOfn = function () {};
+    
     var Framework = function () {
+        var framework = this;
         this.components = {};
         this._componentPromises = {};
         this._componentResolvers = {};
@@ -25,6 +28,85 @@ window.CARNIVAL = (function () {
         
         this.canvas = null;
         this.engine = null;
+        
+        
+        /* These are libraries for specific primal elements of Carnival. */
+        /* Several of these are used to cause things to exist - the plural forms of these names are used for storing these.
+        eg, framework.shader.load() can load a shader into framework.shaders
+        */
+        this.shader = {
+            
+        };
+        this.shaders = {};
+        
+        this.texture = {
+            fromColor: function (values, label, params) {return framework.addTextureFromColor(values, label, params)},
+            fromImage: function (src, label) {return framework.textureFromImage(src, label)},
+            fromCanvas: TODOfn
+        };
+        this.textures = {};
+        
+        this.mesh = {
+            analyse: FCMeshTools.analyseMesh,
+            shunt: FCMeshTools.shuntMesh,
+            turn: FCMeshTools.turnMesh,
+            synthesizeNormals: FCMeshTools.synthesizeNormals,
+            load: FCShapeUtils.loadMesh,
+            Mesh: FCShapes.MeshShape
+        };
+        this.meshes = {};
+        
+        this.material = {
+        };
+        this.materials = {};
+        
+        this.component = {
+            load: TODOfn,
+            register: TODOfn,
+            
+        };
+        this.components = {};
+        
+        this.scene = {
+            load: TODOfn,
+            Scene: FCScene
+        };
+        // this.scenes = {};
+        
+        this.app = {
+            
+        };
+        this.apps = {};
+        
+        this.hardware = {
+            controller: {
+                getMotionControllers: FCUtil.getVRGamepads,
+                makeTracker: FCUtil.makeGamepadTracker,
+                makeRayProjector: FCUtil.makeControllerRayProjector
+            }
+        };
+
+        this.primitive = {
+            Mesh: FCShapes.MeshShape,
+            Container: FCPrimitives.Container
+        };
+
+        this.shape = {
+            LatheExtruder: FCShapes.LatheExtruderShape,
+            Cuboid: FCShapes.SimpleCuboid,
+            Rectangle: FCShapes.WallShape
+        };
+
+        // this.engine = {
+        //
+        // }
+        this.util = {
+            PlanarCollider: FCUtil.PlanarCollider
+        };
+        this.network = {
+            
+        };
+        
         
         // console.log('instanciating');
     }
@@ -62,12 +144,13 @@ window.CARNIVAL = (function () {
     // Framework.prototype.initVR = dummy; /* engine.setActiveViewports(['leftEye', 'rightEye', 'cam1']) */
     
     
-    Framework.prototype.loadComponent = function (ident, url) {
+    Framework.prototype.loadComponent = function (ident, url, label) {
         /* component will need to call CARNIVAL.registerComponent($ident, class) or something when it loads */
         /* ident eg net.meta4vr.vrcomponent.selectgrid */
         var framework = this;
         var loader = document.createElement('script');
         loader.src = url;
+        framework._componentMeta[ident] = {label:label};
         var p = new Promise(function (resolve, reject) {
             framework._componentResolvers[ident] = resolve;
         });
@@ -78,11 +161,149 @@ window.CARNIVAL = (function () {
     };
     
     Framework.prototype.registerComponent = function (componentIdent, klass) {
+        var framework = this;
         console.log('registering component', componentIdent);
-        this.components[componentIdent] = klass;
-        var resolver = this._componentResolvers[componentIdent];
-        if (resolver && resolver.call) resolver(klass);
+        var myMeta = framework._componentMeta[componentIdent];
+        var cLabel = myMeta.label || componentIdent;
+        framework.components[cLabel] = klass;
+        var reqPromises = [];
+        if (klass.prototype._requisites) {
+            console.log('Requisistes:', klass.prototype._requisites);
+            var requi = klass.prototype._requisites;
+            for (var i = 0; i < requi.meshes.length; i++) {
+                var meshInf = requi.meshes[i];
+                reqPromises.push(
+                    (function (inf) {return new Promise(function (resolve, reject) {
+                        CARNIVAL.mesh.load(inf.src).then(function (mesh) {resolve({label:inf.label, mesh:mesh});})
+                    })})(meshInf)
+                );
+            }
+        }
+        Promise.all(reqPromises).then(function (things) {
+            var res = {};
+            for (var i = 0; i < things.length; i++) {
+                var thisThing = things[i];
+                res[thisThing.label] = thisThing;
+            }
+            klass.prototype.resources = res;
+            var resolver = framework._componentResolvers[componentIdent];
+            if (resolver && resolver.call) resolver(klass);
+        });
     };
+    
+    Framework.prototype.allocTextureUnit = function () {
+        return this.engine._textureUnits.shift();
+    }
+    
+    Framework.prototype.releaseTextureUnit = function (u) {
+        this.engine._textureUnits.push(u);
+    }
+    
+    Framework.prototype.addTextureFromCanvas = function (canvas, label, params) {
+        var idx = 1; /* TODO */
+        var gl = this.engine.gl;
+        var txU = this.allocTextureUnit();
+        gl.activeTexture(txU);
+        var texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); /* TODO */
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        // gl.activeTexture(gl.TEXTURE0);
+        this.releaseTextureUnit(txU);
+        // gl.uniform1i()
+        if (label) this.textures[label] = texture;
+        return texture;
+        
+    }
+    
+    Framework.prototype.addTextureFromColor = function (values, label, params) {
+        /* There's probably a better way to do this */
+        var cnv = document.createElement('canvas');
+        var r, g, b, a;
+        if (values.hex) {
+            r = parseInt(values.hex.slice(1,3), 16);
+            g = parseInt(values.hex.slice(3,5), 16);
+            b = parseInt(values.hex.slice(5,7), 16);
+            a = parseInt(values.hex.slice(7,9), 16) || 1;
+        }
+        else {
+            r = values.r * 255;
+            g = values.g * 255;
+            b = values.b * 255;
+            a = (values.a || 1) * 255;
+        }
+        cnv.width = 1;
+        cnv.height = 1;
+        var c2x = cnv.getContext('2d');
+        c2x.beginPath();
+        c2x.rect(0, 0, 1, 1);
+        c2x.fillStyle = 'rgba('+Math.floor(r)+','+ 
+                            Math.floor(g)+','+ 
+                            Math.floor(b)+','+ 
+                            Math.floor(a)+')';
+        c2x.fill()
+        return this.addTextureFromCanvas(cnv, label, params);
+    }
+    
+    Framework.prototype.textureFromImage = function (src, label) {
+        var framework = this;
+        var loadImg = function (src, label) {
+            return new Promise(function (resolve, reject) {
+                var im = document.createElement('img');
+                im.crossOrigin = 'anonymous';
+                im.onload = function () {
+                    console.log(im.width, im.height);
+                    // var s = 2048;
+                    var s = Math.pow(2, Math.floor(Math.log2(Math.min(im.width, im.height))));
+                    console.log('s = ',s);
+                    var w = im.width;
+                    var h = im.height;
+                    var cnv = document.createElement('canvas');
+                    cnv.width = im.width;
+                    cnv.height = im.height;
+                    var c2x = cnv.getContext('2d');
+                    // c2x.drawImage(im, 0, 0, s, s);
+                    // c2x.beginPath();
+                    // c2x.rect(10, 10, 100, 100);
+                    // c2x.fillStyle = 'blue';
+                    // c2x.fill();
+                    // scene.addTextureFromCanvas(cnv, label);
+                    // document.body.appendChild(cnv);
+                    c2x.drawImage(im, 0, 0, s, s);
+                    var encaps = {
+                        pixels: c2x.getImageData(0, 0, s, s),
+                        label: label
+                    }
+                    // var tex = scene.addEncapsulatedTexture(encaps);
+                    
+                    var gl = framework.engine.gl;
+                    var txU = framework.allocTextureUnit()
+                    gl.activeTexture(txU);
+                    var texture = gl.createTexture();
+                    gl.bindTexture(gl.TEXTURE_2D, texture);
+                    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, encaps.pixels);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); /* TODO */
+                    gl.bindTexture(gl.TEXTURE_2D, texture);
+                    // gl.activeTexture(gl.TEXTURE0);
+                    // gl.uniform1i()
+                    framework.releaseTextureUnit(txU);
+                    if (encaps.label) framework.textures[encaps.label] = texture;
+                    
+                    
+                    
+                    resolve({texture:texture, width:im.width, height:im.height});
+                }
+                im.src = src;
+            });
+        }
+        return loadImg(src, label);
+        
+    }
     
     
     /* ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- */
@@ -105,37 +326,6 @@ window.CARNIVAL = (function () {
     var webglCanvas = null;
     var gl = null;
     var _scene = null;
-
-
-    var Engine = function (canvas, viewports) {
-        var engine = this;
-        this.canvas = canvas;
-        this.viewports = viewports;
-        this.vrDisplay = null;
-        this.clearColor = {r:0.1, g:0.4, b:0.2, a:1.0};
-        
-        this.gl = null;
-        this.viewMat = mat4.create();
-        this.poseMat = mat4.create();
-        this.projectionMat = mat4.create();
-        
-        this.orientation = [0, 0, 0];
-        this.position = [0, 0, 0];
-        
-        this.activeViewports = ['leftEye', 'rightEye', 'cam3']; // <<< TODO 
-        
-        console.log(navigator);
-        if (navigator.getVRDisplays) {
-            navigator.getVRDisplays()
-            .then(function (displays) {
-                if (displays.length > 0) {
-                    engine.vrDisplay = displays[0];
-                }
-            })
-        }
-        
-    }
-    
     
     Framework.prototype.start = function () {
         "use strict";
@@ -223,6 +413,40 @@ window.CARNIVAL = (function () {
         
     }
     
+    var Engine = function (canvas, viewports) {
+        var engine = this;
+        this.canvas = canvas;
+        this.viewports = viewports;
+        this.vrDisplay = null;
+        this.clearColor = {r:0.1, g:0.4, b:0.2, a:1.0};
+        
+        this.gl = null;
+        this.viewMat = mat4.create();
+        this.poseMat = mat4.create();
+        this.projectionMat = mat4.create();
+        
+        this.orientation = [0, 0, 0];
+        this.position = [0, 0, 0];
+        
+        this.activeViewports = ['leftEye', 'rightEye', 'cam3']; // <<< TODO 
+        
+        // this._currentTextureUnit
+        this._textureUnits = [];
+        
+        console.log(navigator);
+        if (navigator.getVRDisplays) {
+            navigator.getVRDisplays()
+            .then(function (displays) {
+                if (displays.length > 0) {
+                    engine.vrDisplay = displays[0];
+                }
+            })
+        }
+        
+    }
+    
+    
+    
     Engine.prototype.initWebGL = function (preserveDrawingBuffer, stageParameters) {
         var engine = this;
         var glAttribs = {
@@ -234,8 +458,13 @@ window.CARNIVAL = (function () {
         gl.clearColor(engine.clearColor.g, engine.clearColor.r, engine.clearColor.b, engine.clearColor.a);
         // gl.clearColor(0.1, 0.4, 0.2, 1.0);
         gl.enable(gl.DEPTH_TEST);
-        gl.enable(gl.CULL_FACE);
+        // gl.enable(gl.CULL_FACE);
         engine.gl = gl;
+        
+        var texMax = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+        for (var i = 0; i < texMax; i++) {
+            this._textureUnits.push(gl['TEXTURE'+i]);
+        }
         if (engine._scene) {
             engine._scene.init(gl, stageParameters);
             engine._scene.setup();
@@ -247,9 +476,10 @@ window.CARNIVAL = (function () {
         window.requestAnimationFrame(function (tt) {engine.handleAnimationFrame(tt);});
         
         
-    }    
+    }
     
     Engine.prototype.handleAnimationFrame = function (t) {
+        CARNIVAL._postRenderTasksVeto = true; /* Not sure if handleAnimationTasks can run parallel with itself. Guard if so */
         var engine = this;
         var gl = engine.gl;
         if (!gl) return;
@@ -269,6 +499,11 @@ window.CARNIVAL = (function () {
             mat4.fromTranslation(reloc, trans);
             mat4.mul(engine.poseMat, reloc, engine.poseMat);
             
+            /* We want to ensure that the time between getting the pose and rendering the frame is as short as possible, so
+               we give the scene the opportunity handle other tasks outside of that cycle */
+            if (this._scene && this._scene.prepareToRender) {
+                this._scene.prepareToRender();
+            }
             if (engine.vrDisplay.isPresenting) {
                 for (var i=0; i<engine.activeViewports.length; i++) {
                     var myPort = engine.viewports[engine.activeViewports[i]];
@@ -293,7 +528,7 @@ window.CARNIVAL = (function () {
             mat4.identity(engine.viewMat);
             mat4.translate(engine.viewMat, engine.viewMat, [0, -PLAYER_HEIGHT, 0]);
             
-            /* TODO tell the scene to render here */
+            /* TODO tell the scene to render here! */
             
             // gl.viewport(0, 0, webglCanvas.width, webglCanvas.height);
             // mat4.perspective(projectionMat, Math.PI*0.4, webglCanvas.width / webglCanvas.height, 0.1, 1024.0);
@@ -303,6 +538,11 @@ window.CARNIVAL = (function () {
             
             
         }
+        CARNIVAL._postRenderTasksVeto = false;
+        while (CARNIVAL._postRenderTasks.length > 0 && !CARNIVAL._postRenderTasksVeto) {
+            CARNIVAL._postRenderTasks.shift()();
+        }
+        
         
     }
     
