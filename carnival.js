@@ -12,7 +12,8 @@ window.CARNIVAL = (function () {
         this._componentMeta = {};
         this._postRenderTasks = []; /* Things to be done after a frame is presented. An array of functions that is cleared after use */
         this._postRenderTasksVeto = false;
-        this._cameraLocked = false;
+        this._cameraLocked = true;
+        this._cameraLockPose = null;
         
         this.core = {
             util: FCUtil,
@@ -137,6 +138,32 @@ window.CARNIVAL = (function () {
     Framework.prototype.attachTo = function (canvasElement) {
         this.canvas = canvasElement;
     };
+    
+    Framework.prototype.setCameraLockPose = function (pose) {
+        this._cameraLockPose = {
+            position: [pose.position[0], pose.position[1], pose.position[2]],
+            orientation: [pose.orientation[0], pose.orientation[1], pose.orientation[2], pose.orientation[3]]
+        };
+    };
+    
+    Framework.prototype.setCameraParams = function (params) {
+        var setVal = function (key, val) {
+            document.getElementById('camera'+key).value = val;
+        }
+        setVal('UpDegrees', params.fov.up);
+        setVal('DownDegrees', params.fov.down);
+        setVal('LeftDegrees', params.fov.left);
+        setVal('RightDegrees', params.fov.right);
+        
+        setVal('TranslateX', params.translate.x);
+        setVal('TranslateY', params.translate.y);
+        setVal('TranslateZ', params.translate.z);
+        
+        setVal('TiltX', params.tilt.x);
+        setVal('TiltY', params.tilt.y);
+        setVal('TiltZ', params.tilt.z);
+        
+    }
     
 
 
@@ -359,7 +386,7 @@ window.CARNIVAL = (function () {
     var gl = null;
     var _scene = null;
     
-    var _cameraLockPose = null;
+    // var _cameraLockPose = null;
     
     Framework.prototype.start = function () {
         "use strict";
@@ -902,32 +929,13 @@ window.CARNIVAL = (function () {
                 var vrGamepads = CARNIVAL.hardware.controller.getMotionControllers();
                 if (vrGamepads[gpIdx] && vrGamepads[gpIdx].pose && vrGamepads[gpIdx].pose.position) {
                     var myGp = vrGamepads[gpIdx];
-                    // var gPose = myGp.pose;
-                    // var cameraTranslate = vec3.create();
-                    // var cameraTilt = vec3.create();
-                    // cameraTranslate[0] = numericValueOfElement('cameraTranslateX');
-                    // cameraTranslate[1] = numericValueOfElement('cameraTranslateY');
-                    // cameraTranslate[2] = numericValueOfElement('cameraTranslateZ');
-                    // cameraTilt[0] = numericValueOfElement('cameraTiltX');
-                    // cameraTilt[1] = numericValueOfElement('cameraTiltY');
-                    // cameraTilt[2] = numericValueOfElement('cameraTiltZ');
-                    // var cameraPos = vec3.create();
-                    // vec3.add(cameraPos, cameraTranslate, gPose.position);
-                    // if (window.vrDisplay.stageParameters) {
-                    //     mat4.fromRotationTranslation(gpMat, gPose.orientation, cameraPos);
-                    //     mat4.multiply(gpMat, vrDisplay.stageParameters.sittingToStandingTransform, gpMat);
-                    // }
                     var p = myGp.pose;
-                    _cameraLockPose = {
+                    CARNIVAL._cameraLockPose = {
                         position: [p.position[0], p.position[1], p.position[2]],
                         orientation: [p.orientation[0], p.orientation[1], p.orientation[2], p.orientation[3]]
                     };
-                    window.CPOSE = _cameraLockPose;
-                    // mat4.clone(_cameraLockPose, myGp.pose);
+                    window.CPOSE = CARNIVAL._cameraLockPose;
                 }
-                // _cameraLockPose = gpMat;
-                
-                
             }
             
             var gpMat = mat4.create();
@@ -936,13 +944,21 @@ window.CARNIVAL = (function () {
             cameraTranslate[0] = numericValueOfElement('cameraTranslateX');
             cameraTranslate[1] = numericValueOfElement('cameraTranslateY');
             cameraTranslate[2] = numericValueOfElement('cameraTranslateZ');
-            cameraTilt[0] = numericValueOfElement('cameraTiltX');
-            cameraTilt[1] = numericValueOfElement('cameraTiltY');
-            cameraTilt[2] = numericValueOfElement('cameraTiltZ');
             var cameraPos = vec3.create();
-            vec3.add(cameraPos, cameraTranslate, _cameraLockPose.position);
+
+            cameraTilt[0] = numericValueOfElement('cameraTiltX') * (Math.PI/180);
+            cameraTilt[1] = numericValueOfElement('cameraTiltY') * (Math.PI/180);
+            cameraTilt[2] = numericValueOfElement('cameraTiltZ') * (Math.PI/180);
+            var cameraRot = quat.create();
+            quat.rotateX(cameraRot, cameraRot, cameraTilt[0]);
+            quat.rotateY(cameraRot, cameraRot, cameraTilt[1]);
+            quat.rotateZ(cameraRot, cameraRot, cameraTilt[2]);
+            quat.mul(cameraRot, CARNIVAL._cameraLockPose.orientation, cameraRot);
+            
+            vec3.add(cameraPos, cameraTranslate, CARNIVAL._cameraLockPose.position);
             if (window.vrDisplay.stageParameters) {
-                mat4.fromRotationTranslation(gpMat, _cameraLockPose.orientation, cameraPos);
+                // mat4.fromRotationTranslation(gpMat, _cameraLockPose.orientation, cameraPos);
+                mat4.fromRotationTranslation(gpMat, cameraRot, cameraPos);
                 mat4.multiply(gpMat, vrDisplay.stageParameters.sittingToStandingTransform, gpMat);
             }
             
@@ -1121,6 +1137,34 @@ window.CARNIVAL = (function () {
             },
             getPose: attachCameraToGamepad(1)
         },
+        cam4: {
+            povLabel: 'cam_2',
+            headsetBounds: port(2).headsetBounds,
+            canvasBounds: port(2).canvasBounds,
+            // canvasBounds: [0.0, 0.0, 1.0, 0.5],
+            getEyeParameters: function () {
+                return {
+                    renderHeight: 1600,
+                    renderWidth: 1512,
+                    offset: [0,0,0],
+                    fieldOfView: {
+                        /// upDegrees: 56.0,
+                        /// downDegrees: 56.0,
+                        upDegrees: numericValueOfElement('cameraUpDegrees'),
+                        downDegrees: numericValueOfElement('cameraDownDegrees'),
+                        leftDegrees: numericValueOfElement('cameraLeftDegrees'),
+                        rightDegrees: numericValueOfElement('cameraRightDegrees')
+                        // upDegrees: 32.0,
+                        // downDegrees: 32.0,
+                        // leftDegrees: 35.0,
+                        // rightDegrees: 35.0
+                
+                    }
+                };
+            },
+            getPose: lockableGamepadCam(1)
+        },
+        
     };
     var activeViewports = [
         viewports.leftEye,
