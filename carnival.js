@@ -967,6 +967,62 @@ window.CARNIVAL = (function () {
         }
         return poseGet;
     }
+    
+    /* This one is attached to the raft, so the player can teleport around */
+    var lockableGamepadCam2 = function (gpIdx) {
+        var poseGet = function () {
+            if (!CARNIVAL._cameraLocked) {
+                var vrGamepads = CARNIVAL.hardware.controller.getMotionControllers();
+                if (vrGamepads[gpIdx] && vrGamepads[gpIdx].pose && vrGamepads[gpIdx].pose.position) {
+                    var myGp = vrGamepads[gpIdx];
+                    var p = myGp.pose;
+                    CARNIVAL._cameraLockPose = {
+                        position: [p.position[0], p.position[1], p.position[2]],
+                        orientation: [p.orientation[0], p.orientation[1], p.orientation[2], p.orientation[3]]
+                    };
+                    window.CPOSE = CARNIVAL._cameraLockPose;
+                }
+            }
+            
+            var gpMat = mat4.create();
+            var cameraTranslate = vec3.create();
+            var cameraTilt = vec3.create();
+            cameraTranslate[0] = numericValueOfElement('cameraTranslateX');
+            cameraTranslate[1] = numericValueOfElement('cameraTranslateY');
+            cameraTranslate[2] = numericValueOfElement('cameraTranslateZ');
+            var pl = CARNIVAL.scenes[0].scene.playerLocation;
+            var raftTranslate = vec3.fromValues(pl.x, pl.y, pl.z);
+            vec3.add(cameraTranslate, cameraTranslate, raftTranslate);
+            // console.log(cameraTranslate);
+
+            var cameraPos = vec3.create();
+
+            cameraTilt[0] = numericValueOfElement('cameraTiltX') * (Math.PI/180);
+            cameraTilt[1] = numericValueOfElement('cameraTiltY') * (Math.PI/180);
+            cameraTilt[2] = numericValueOfElement('cameraTiltZ') * (Math.PI/180);
+            var cameraRot = quat.create();
+            quat.rotateX(cameraRot, cameraRot, cameraTilt[0]);
+            quat.rotateY(cameraRot, cameraRot, cameraTilt[1]);
+            quat.rotateZ(cameraRot, cameraRot, cameraTilt[2]);
+            quat.mul(cameraRot, CARNIVAL._cameraLockPose.orientation, cameraRot);
+            
+            vec3.add(cameraPos, cameraTranslate, CARNIVAL._cameraLockPose.position);
+            if (window.vrDisplay.stageParameters) {
+                // mat4.fromRotationTranslation(gpMat, _cameraLockPose.orientation, cameraPos); //1
+                // mat4.fromRotationTranslation(gpMat, cameraRot, cameraPos); //2
+                mat4.fromRotationTranslation(gpMat, cameraRot, CARNIVAL._cameraLockPose.position);
+                var cameraTransMat = mat4.create();
+                mat4.fromTranslation(cameraTransMat, cameraTranslate);
+                mat4.multiply(gpMat, vrDisplay.stageParameters.sittingToStandingTransform, gpMat);
+                mat4.multiply(gpMat, cameraTransMat, gpMat);
+            }
+            
+            // var transformedCameraPose = mat4.create();
+            return gpMat;
+        }
+        return poseGet;
+    }
+
 
     var attachSceneCamera = function (label) {
         var poseGet = function () {
@@ -1162,7 +1218,7 @@ window.CARNIVAL = (function () {
                     }
                 };
             },
-            getPose: lockableGamepadCam(1)
+            getPose: lockableGamepadCam2(1)
         },
         
     };
