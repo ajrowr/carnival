@@ -13,7 +13,10 @@ window.CARNIVAL = (function () {
         this._postRenderTasks = []; /* Things to be done after a frame is presented. An array of functions that is cleared after use */
         this._postRenderTasksVeto = false;
         this._cameraLocked = true;
-        this._cameraLockPose = null;
+        this._cameraLockPose = {
+            position: vec3.create(),
+            orientation: quat.create()
+        };
         
         this.core = {
             util: FCUtil,
@@ -197,6 +200,7 @@ window.CARNIVAL = (function () {
         var myMeta = framework._componentMeta[componentIdent];
         var cLabel = myMeta.label || componentIdent;
         framework.components[cLabel] = klass;
+        framework.components[componentIdent] = klass; /* TODO potential duplication, does it matter? */
         var reqPromises = [];
         if (klass.prototype._requisites) {
             console.log('Requisistes:', klass.prototype._requisites);
@@ -551,6 +555,12 @@ window.CARNIVAL = (function () {
         if (engine.vrDisplay) {
             // console.log('displaying');
             engine.vrDisplay.requestAnimationFrame(function (tt) {engine.handleAnimationFrame(tt);});
+            
+            /* We want to ensure that the time between getting the pose and rendering the frame is as short as possible, so
+               we give the scene the opportunity handle other tasks outside of that cycle */
+            if (this._scene && this._scene.prepareToRender) {
+                this._scene.prepareToRender();
+            }
             var pose = engine.vrDisplay.getPose();
             engine.getPoseMatrix(engine.poseMat, pose);
             
@@ -559,12 +569,6 @@ window.CARNIVAL = (function () {
             var reloc = mat4.create();
             mat4.fromTranslation(reloc, trans);
             mat4.mul(engine.poseMat, reloc, engine.poseMat);
-            
-            /* We want to ensure that the time between getting the pose and rendering the frame is as short as possible, so
-               we give the scene the opportunity handle other tasks outside of that cycle */
-            if (this._scene && this._scene.prepareToRender) {
-                this._scene.prepareToRender();
-            }
             if (engine.vrDisplay.isPresenting) {
                 for (var i=0; i<engine.activeViewports.length; i++) {
                     var myPort = engine.viewports[engine.activeViewports[i]];
