@@ -1,5 +1,137 @@
+/* TODO implement changes from the standard */
+/* TODO tune motion-to-photon loop */
+/* TODO tutorial component */
+/* TODO perf display component */
+/* TODO imageboard component */
+/* TODO debugger. detect too-small scale factor, missing shader / material / texture, ... */
+/* TODO consider not having both scale and scaleFactor be reserved words? */
+
+
+/* TODO there must be a more straightforward way to do image -> tex */
+
+/* Components need -
+    - multiple components per file
+    - show() and hide()
+    - equivalent for loadprereqs - basically like a scene's setup procedure
+    - caching
+    - component catalogs
+    - more elegant way to address components - CARNIVAL.component('name')
+    - load as
+    - components as prereqs (should work anyway)
+    - 
+
+    C.component.load(...)
+    
+    
+    
+Carnival framework itself - 
+- should move things like shader loading into here
+- change locations of things eg. mesh loading
+- clusterize and compile with grunt? minify?
+*/
 
 /* This code (or something like it) will become part of (or a wrapper for) the framework. */
+
+/* 
+Carnival Framework.
+@author Alan Rowarth
+@version 0.19
+@license MIT
+
+This contains code from
+Three.js
+Brandon Jones
+.. obj loader guy
+*/
+
+/* pattern is for subclass to call this with (params, drawableClass)? */
+/* TODO any drawables that don't support the "standard" pos,size,ori,params constructor can get fuc^H^H^Hsidegraded */
+/* TODO review standardisation of size */
+/* TODO centering? size.centerOn? */
+/* TODO automatic bounds analysis... should be easy to do and massively useful */
+/* component
+    .serialize
+    .info
+    .prerequisites
+    .dependencies
+    .prepare
+    .addChild / .removeChild
+*/
+window.FCComponent = (function () {
+    var Component = function (params, drawableClass) {
+        var p = params || {draw:{}};
+        this.label = p.label || null;
+        this.physicsParams = p.physics || {};
+        this.configParams = p.config || {};
+        this.inputParams = p.input || {};
+        
+        this.drawParams = {
+            materialLabel: p.draw.materialLabel || 'matteplastic',
+            textureLabel: p.draw.textureLabel || null,
+            shaderLabel: p.draw.shaderLabel || null,
+            position: p.draw.position || {x:0, y:1, z:0},
+            orientation: p.draw.orientation || {x:0, y:0, z:0},
+            rotationQuaternion: p.draw.rotationQuaternion || null,
+            size: {
+                width: p.draw.size && p.draw.size.width || 1,
+                height: p.draw.size && p.draw.size.height || 1,
+                depth: p.draw.size && p.draw.size.depth || 1,
+                scale: p.draw.size && p.draw.size.scale || 1
+            }
+        }
+        var dp = this.drawParams;
+        if (drawableClass) {
+            this.drawable = new drawableClass(dp.position, dp.size, dp.orientation, {
+                materialLabel:dp.materialLabel, textureLabel:dp.textureLabel, shaderLabel:dp.shaderLabel, rotationQuaternion:dp.rotationQuaternion
+            });
+        }
+        
+    }
+    
+    Component.prototype.prepare = function () {
+        var component = this;
+        return new Promise(function (resolve, reject) {
+            resolve(component);
+        })
+    }
+    
+    Component.prototype.serialize = function () {
+        var component = this;
+        var mat = component.transformationMatrix && component.transformationMatrix() 
+                || component.drawable.transformationMatrix && component.drawable.transformationMatrix();
+    
+        var getPos = function () {
+            var trans = vec3.create();
+            mat4.getTranslation(trans, mat);
+            return {x:trans[0], y:trans[1], z:trans[2]};
+            // return component.position; /* This should extract trans and rot from the transform matrix */
+        }
+        var getRot = function () {
+            var rot = quat.create();
+            mat4.getRotation(rot, mat);
+            return rot;
+            // return component.orientation;
+        }
+    
+        return {
+            component: component.meta.ident,
+            label: component.label,
+            draw: {
+                position: getPos(),
+                rotationQuaternion: getRot(),
+                materialLabel: component.drawParams.materialLabel,
+                textureLabel: component.drawParams.textureLabel,
+                size: component.drawParams.size
+            },
+            config: component.configParams,
+            input: component.inputParams,
+            physics: component.physicsParams
+        }
+    }
+    
+    return Component;
+})();
+
 window.CARNIVAL = (function () {
     
     var TODOfn = function () {};
@@ -71,6 +203,7 @@ window.CARNIVAL = (function () {
         this.component = {
             load: TODOfn,
             register: TODOfn,
+            Component: FCComponent
             
         };
         this.components = {};
@@ -102,7 +235,8 @@ window.CARNIVAL = (function () {
         this.shape = {
             LatheExtruder: FCShapes.LatheExtruderShape,
             Cuboid: FCShapes.SimpleCuboid,
-            Rectangle: FCShapes.WallShape
+            Rectangle: FCShapes.WallShape,
+            SegmentedRectangle: FCShapes.WallShape2
         };
 
         // this.engine = {
