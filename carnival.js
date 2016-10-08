@@ -65,18 +65,22 @@ window.FCComponent = (function () {
         this.configParams = p.config || {};
         this.inputParams = p.input || {};
         
+        /* This doesn't prevent serialization, rather is a hint to a mass serializer to skip this */
+        this.shouldSerialize = this.configParams.shouldSerialize || false; 
+        
+        var d = p.draw || {};
         this.drawParams = {
-            materialLabel: p.draw.materialLabel || 'matteplastic',
-            textureLabel: p.draw.textureLabel || null,
-            shaderLabel: p.draw.shaderLabel || null,
-            position: p.draw.position || {x:0, y:1, z:0},
-            orientation: p.draw.orientation || {x:0, y:0, z:0},
-            rotationQuaternion: p.draw.rotationQuaternion || null,
-            size: {
-                width: p.draw.size && p.draw.size.width || 1,
-                height: p.draw.size && p.draw.size.height || 1,
-                depth: p.draw.size && p.draw.size.depth || 1,
-                scale: p.draw.size && p.draw.size.scale || 1
+            materialLabel: d.materialLabel || 'matteplastic',
+            textureLabel: d.textureLabel || null,
+            shaderLabel: d.shaderLabel || null,
+            position: d.position || {x:0, y:1, z:0},
+            orientation: d.orientation || {x:0, y:0, z:0},
+            rotationQuaternion: d.rotationQuaternion || null,
+            size: this._explicitSize || { /* In some situations the defaults may clash with each other, in which case give an _explicitSize in the subclass */
+                width: d.size && d.size.width || 1,
+                height: d.size && d.size.height || 1,
+                depth: d.size && d.size.depth || 1,
+                scale: d.size && d.size.scale || 1
             }
         }
         var dp = this.drawParams;
@@ -192,7 +196,8 @@ window.CARNIVAL = (function () {
             turn: FCMeshTools.turnMesh,
             synthesizeNormals: FCMeshTools.synthesizeNormals,
             load: FCShapeUtils.loadMesh,
-            Mesh: FCShapes.MeshShape
+            Mesh: FCShapes.MeshShape,
+            Mesh2: FCShapes.MeshShape2,
         };
         this.meshes = {};
         
