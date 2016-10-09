@@ -134,70 +134,78 @@ window.FCComponent = (function () {
     }
     
     Component.prototype.showBounds = function (state) {
-        if (state == false && this.drawable.behaviors.showingBounds) this.drawable.removeBehavior('showingBounds');
-        else if (state == true && this.drawable.bounds) {
+        var comp = this;
+        if (state == false && comp.drawable.behaviors.showingBounds) {
+            comp.drawable.removeBehavior('showingBounds');
+            comp._tempgeom_bounds = null;
+        }
+        else if (state == true && comp.drawable.bounds) {
+            
+            var gl = CARNIVAL.engine.gl;
+            // var p = CARNIVAL.primitive.Poly;
+        
+            var b = comp.drawable.bounds;
+            // var b = {
+            //     maxX: 1, minX:-1, maxY: 1, minY: -1, maxZ: 1, minZ: -1
+            // }
+            var xplus = b.maxX, xminus = b.minX;
+            var yplus = b.maxY, yminus = b.minY;
+            var zplus = b.maxZ, zminus = b.minZ;
+    
+            // var P = CARNIVAL.primitive.Poly;
+            var P = FCPrimitives;
+            var A = P.mkVert(xminus, yplus, zplus);
+            var B = P.mkVert(xplus, yplus, zplus);
+            var C = P.mkVert(xplus, yminus, zplus);
+            var D = P.mkVert(xminus, yminus, zplus);
+            var E = P.mkVert(xplus, yminus, zminus);
+            var F = P.mkVert(xplus, yplus, zminus);
+            var G = P.mkVert(xminus, yminus, zminus);
+            var H = P.mkVert(xminus, yplus, zminus);
+        
+            var shape = new P.Poly();
+    
+            /* Front */
+            shape.normal(0, 0, 1);
+            shape.add(A, P.tex.tl, D, P.tex.bl, B, P.tex.tr);
+            shape.add(D, P.tex.bl, C, P.tex.br, B, P.tex.tr);
+
+            /* Back */
+            shape.normal(0, 0, -1);
+            shape.add(F, P.tex.tl, E, P.tex.bl, H, P.tex.tr);
+            shape.add(E, P.tex.bl, G, P.tex.br, H, P.tex.tr);
+
+            /* Left */
+            shape.normal(-1, 0, 0);
+            shape.add(H, P.tex.tl, G, P.tex.bl, A, P.tex.tr);
+            shape.add(G, P.tex.bl, D, P.tex.br, A, P.tex.tr);
+
+            /* Right */
+            shape.normal(1, 0, 0);
+            shape.add(B, P.tex.tl, C, P.tex.bl, F, P.tex.tr);
+            shape.add(C, P.tex.bl, E, P.tex.br, F, P.tex.tr);
+
+            /* Top */
+            shape.normal(0, 1, 0);
+            shape.add(H, P.tex.tl, A, P.tex.bl, F, P.tex.tr);
+            shape.add(A, P.tex.bl, B, P.tex.br, F, P.tex.tr);
+
+            /* Bottom */
+            shape.normal(0, -1, 0);
+            shape.add(D, P.tex.tl, G, P.tex.bl, C, P.tex.tr);
+            shape.add(G, P.tex.bl, E, P.tex.br, C, P.tex.tr);
+            
+            this._tempgeom_bounds = {
+                vertices: shape.verts,
+                indices: shape.indices
+            };
+            
             this.drawable.addBehavior(function (d,t){
-                var gl = CARNIVAL.engine.gl;
-                // var p = CARNIVAL.primitive.Poly;
-            
-                var b = d.bounds;
-                // var b = {
-                //     maxX: 1, minX:-1, maxY: 1, minY: -1, maxZ: 1, minZ: -1
-                // }
-                var xplus = b.maxX, xminus = b.minX;
-                var yplus = b.maxY, yminus = b.minY;
-                var zplus = b.maxZ, zminus = b.minZ;
-        
-                // var P = CARNIVAL.primitive.Poly;
-                var P = FCPrimitives;
-                var A = P.mkVert(xminus, yplus, zplus);
-                var B = P.mkVert(xplus, yplus, zplus);
-                var C = P.mkVert(xplus, yminus, zplus);
-                var D = P.mkVert(xminus, yminus, zplus);
-                var E = P.mkVert(xplus, yminus, zminus);
-                var F = P.mkVert(xplus, yplus, zminus);
-                var G = P.mkVert(xminus, yminus, zminus);
-                var H = P.mkVert(xminus, yplus, zminus);
-            
-                var shape = new P.Poly();
-        
-                /* Front */
-                shape.normal(0, 0, 1);
-                shape.add(A, P.tex.tl, D, P.tex.bl, B, P.tex.tr);
-                shape.add(D, P.tex.bl, C, P.tex.br, B, P.tex.tr);
-
-                /* Back */
-                shape.normal(0, 0, -1);
-                shape.add(F, P.tex.tl, E, P.tex.bl, H, P.tex.tr);
-                shape.add(E, P.tex.bl, G, P.tex.br, H, P.tex.tr);
-
-                /* Left */
-                shape.normal(-1, 0, 0);
-                shape.add(H, P.tex.tl, G, P.tex.bl, A, P.tex.tr);
-                shape.add(G, P.tex.bl, D, P.tex.br, A, P.tex.tr);
-
-                /* Right */
-                shape.normal(1, 0, 0);
-                shape.add(B, P.tex.tl, C, P.tex.bl, F, P.tex.tr);
-                shape.add(C, P.tex.bl, E, P.tex.br, F, P.tex.tr);
-
-                /* Top */
-                shape.normal(0, 1, 0);
-                shape.add(H, P.tex.tl, A, P.tex.bl, F, P.tex.tr);
-                shape.add(A, P.tex.bl, B, P.tex.br, F, P.tex.tr);
-
-                /* Bottom */
-                shape.normal(0, -1, 0);
-                shape.add(D, P.tex.tl, G, P.tex.bl, C, P.tex.tr);
-                shape.add(G, P.tex.bl, E, P.tex.br, C, P.tex.tr);
-            
-            
                 d._temporaryGeometry.push({
                     drawMode: gl.LINES,
-                    indices: shape.indices,
-                    vertices: shape.verts,
-                    modelMat: d.transformationMatrix(),
-                    shape: shape
+                    indices: comp._tempgeom_bounds.indices,
+                    vertices: comp._tempgeom_bounds.vertices,
+                    modelMat: d.transformationMatrix()
                 });
                 
             }, 'showingBounds')
