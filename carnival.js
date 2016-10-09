@@ -142,62 +142,31 @@ window.FCComponent = (function () {
         else if (state == true && comp.drawable.bounds) {
             
             var gl = CARNIVAL.engine.gl;
-            // var p = CARNIVAL.primitive.Poly;
         
             var b = comp.drawable.bounds;
-            // var b = {
-            //     maxX: 1, minX:-1, maxY: 1, minY: -1, maxZ: 1, minZ: -1
-            // }
-            var xplus = b.maxX, xminus = b.minX;
-            var yplus = b.maxY, yminus = b.minY;
-            var zplus = b.maxZ, zminus = b.minZ;
-    
-            // var P = CARNIVAL.primitive.Poly;
-            var P = FCPrimitives;
-            var A = P.mkVert(xminus, yplus, zplus);
-            var B = P.mkVert(xplus, yplus, zplus);
-            var C = P.mkVert(xplus, yminus, zplus);
-            var D = P.mkVert(xminus, yminus, zplus);
-            var E = P.mkVert(xplus, yminus, zminus);
-            var F = P.mkVert(xplus, yplus, zminus);
-            var G = P.mkVert(xminus, yminus, zminus);
-            var H = P.mkVert(xminus, yplus, zminus);
-        
-            var shape = new P.Poly();
-    
-            /* Front */
-            shape.normal(0, 0, 1);
-            shape.add(A, P.tex.tl, D, P.tex.bl, B, P.tex.tr);
-            shape.add(D, P.tex.bl, C, P.tex.br, B, P.tex.tr);
-
-            /* Back */
-            shape.normal(0, 0, -1);
-            shape.add(F, P.tex.tl, E, P.tex.bl, H, P.tex.tr);
-            shape.add(E, P.tex.bl, G, P.tex.br, H, P.tex.tr);
-
-            /* Left */
-            shape.normal(-1, 0, 0);
-            shape.add(H, P.tex.tl, G, P.tex.bl, A, P.tex.tr);
-            shape.add(G, P.tex.bl, D, P.tex.br, A, P.tex.tr);
-
-            /* Right */
-            shape.normal(1, 0, 0);
-            shape.add(B, P.tex.tl, C, P.tex.bl, F, P.tex.tr);
-            shape.add(C, P.tex.bl, E, P.tex.br, F, P.tex.tr);
-
-            /* Top */
-            shape.normal(0, 1, 0);
-            shape.add(H, P.tex.tl, A, P.tex.bl, F, P.tex.tr);
-            shape.add(A, P.tex.bl, B, P.tex.br, F, P.tex.tr);
-
-            /* Bottom */
-            shape.normal(0, -1, 0);
-            shape.add(D, P.tex.tl, G, P.tex.bl, C, P.tex.tr);
-            shape.add(G, P.tex.bl, E, P.tex.br, C, P.tex.tr);
+            //----
+            var min = {x:b.minX, y:b.minY, z:b.minZ};
+            var max = {x:b.maxX, y:b.maxY, z:b.maxZ};
             
+            var vv = [], ii = [], ci = 0;
+            var line = function (a,b) {
+                vv = vv.concat([a[0],a[1],a[2], 0,0,0,0,0]); ii.push(ci++);
+                vv = vv.concat([b[0],b[1],b[2], 0,0,0,0,0]); ii.push(ci++);
+            }
+            var A=[min.x, min.y, min.z], B=[min.x, min.y, max.z], C=[min.x, max.y, min.z], D=[min.x, max.y, max.z];
+            var E=[max.x, min.y, min.z], F=[max.x, min.y, max.z], G=[max.x, max.y, min.z], H=[max.x, max.y, max.z];
+            // line(tMin.x, tMin.y, tMin.z, tMax.x, tMax.y, tMax.z);
+            // line(tMin.x, tMax.y, tMin.z, tMax.x, tMax.y, tMax.z);
+            line(A,E); line(E,F); line(F,B); line(B,A);
+            line(C,G); line(G,H); line(H,D); line(D,C); 
+            line(A,C); line(B,D); line(E,G); line(F,H); 
+            line(E,C); line(G,A);
+            line(H,B); line(F,D);
+            //----
+    
             this._tempgeom_bounds = {
-                vertices: shape.verts,
-                indices: shape.indices
+                vertices: vv,
+                indices: ii
             };
             
             this.drawable.addBehavior(function (d,t){
