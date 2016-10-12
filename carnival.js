@@ -205,6 +205,12 @@ window.CARNIVAL = (function () {
             position: vec3.create(),
             orientation: quat.create()
         };
+        this._startTime = new Date().getTime();
+        this._perfContext = null;
+        this._perfReports = {};
+        this._perfRecords = {};
+        this._perfRecordsPtr = 0;
+        this._perfRecordsCount = 100;
         
         this.core = {
             util: FCUtil,
@@ -333,6 +339,30 @@ window.CARNIVAL = (function () {
     Framework.prototype.attachTo = function (canvasElement) {
         this.canvas = canvasElement;
     };
+    
+    Framework.prototype.setPerfContext = function (key) {
+        this._perfContext = key;
+        if (!this._perfReports[key]) this._perfReports[key] = {};
+    }
+    /* State is STARTED or ENDED */
+    Framework.prototype.reportTimeMeasurement = function (categoryKey, itemKey, state) {
+        var ct = this._perfReports[this._perfContext];
+        if (!ct[categoryKey]) {
+            ct[categoryKey] = {};
+        }
+        var pr = ct[categoryKey];
+        var t = new Date().getTime() - this._startTime;
+        pr[itemKey+'__'+state] = t;
+        if (state == 'ended' && pr[itemKey+'__started']) {
+            var duration = Math.abs(t - pr[itemKey+'__started']);
+            pr[itemKey+'__duration'] = duration;
+            var kk = this._perfContext + '__' + categoryKey + '__' + itemKey;
+            var prec = this._perfRecords;
+            if (!prec[kk]) prec[kk] = new Array(this._perfRecordsCount);
+            prec[kk][this._perfRecordsPtr] = duration;
+        }
+    }
+    Framework.prototype.reportTimeMeasurement = function (){};
     
     Framework.prototype.setCameraLockPose = function (pose) {
         this._cameraLockPose = {
@@ -736,6 +766,10 @@ window.CARNIVAL = (function () {
     }
     
     Engine.prototype.handleAnimationFrame = function (t) {
+        CARNIVAL.setPerfContext('general');
+        CARNIVAL._perfRecordsPtr = (CARNIVAL._perfRecordsPtr+1) % CARNIVAL._perfRecordsCount;
+        CARNIVAL.reportTimeMeasurement('engine', 'intervalBetweenFrames', 'ended');
+        CARNIVAL.reportTimeMeasurement('engine', 'handleAnimationFrame', 'started');
         CARNIVAL._postRenderTasksVeto = true; /* Not sure if handleAnimationTasks can run parallel with itself. Guard if so */
         var engine = this;
         var gl = engine.gl;
@@ -750,9 +784,11 @@ window.CARNIVAL = (function () {
             
             /* We want to ensure that the time between getting the pose and rendering the frame is as short as possible, so
                we give the scene the opportunity handle other tasks outside of that cycle */
+            CARNIVAL.reportTimeMeasurement('engine', 'renderPrep', 'started');
             if (this._scene && this._scene.prepareToRender) {
                 this._scene.prepareToRender();
             }
+            CARNIVAL.reportTimeMeasurement('engine', 'renderPrep', 'started');
             var pose = engine.vrDisplay.getPose();
             engine.getPoseMatrix(engine.poseMat, pose);
             
@@ -800,7 +836,9 @@ window.CARNIVAL = (function () {
             CARNIVAL._postRenderTasks.shift()();
         }
         
-        
+        CARNIVAL.setPerfContext('general');
+        CARNIVAL.reportTimeMeasurement('engine', 'handleAnimationFrame', 'ended');
+        CARNIVAL.reportTimeMeasurement('engine', 'intervalBetweenFrames', 'started');
     }
     
     
@@ -846,8 +884,11 @@ window.CARNIVAL = (function () {
             mat4.perspective(this.projectionMat, Math.PI*0.4, this.canvas.width / this.canvas.height, 0.1, 1024.0);
             mat4.invert(this.viewMat, poseInMat);
         }
-
+        
+        CARNIVAL.setPerfContext(pov);
+        CARNIVAL.reportTimeMeasurement('engine', 'frameRender', 'started');
         if (this._scene) this._scene.render(this.projectionMat, this.viewMat, pov);
+        CARNIVAL.reportTimeMeasurement('engine', 'frameRender', 'ended');
     }
     
     
