@@ -200,6 +200,38 @@ window.FCComponent = (function () {
     return Component;
 })();
 
+
+window.FCComponentLibrary = (function () {
+    var ComponentLibrary = function (path) {
+        this.path = path;
+        this.components = {};
+    }
+    
+    ComponentLibrary.prototype.load = function (componentFQName, loadAsName) {
+        let library = this;
+        let compPath = componentFQName.replace(/\./g, '/');
+        let compSrc = `${library.path}/${compPath}_component.js`;
+        return new Promise(function (resolve, reject) {
+            CARNIVAL.loadComponent(componentFQName, compSrc, loadAsName)
+            .then(function (compClass) {
+                library.components[loadAsName] = compClass;
+                resolve(compClass);
+            });
+        });
+    }
+    
+    ComponentLibrary.prototype.componentClass = function (loadedAsName) {
+        return this.components[loadedAsName];
+    }
+    
+    ComponentLibrary.prototype.new = function (loadedAsName) {
+        return (...params) => new this.components[loadedAsName](...params);
+    }
+    
+    return ComponentLibrary;
+    
+})();
+
 window.FCColor = (function () {
     
     var Color = function (hexCode) {
@@ -297,7 +329,8 @@ window.CARNIVAL = (function () {
         this.component = {
             load: TODOfn,
             register: TODOfn,
-            Component: FCComponent
+            Component: FCComponent,
+            ComponentLibrary: FCComponentLibrary
             
         };
         this.components = {};
